@@ -58,16 +58,19 @@ describe("email worker rendering", () => {
     describe(locale, () => {
       for (const {name, template, expected} of templates) {
         it(`renders ${name} with localized content`, async () => {
-          const html = await renderEmailTemplate(template, locale);
+          const {html, text} = await renderEmailTemplate(template, locale);
 
           expect(html).toMatch(/^<!DOCTYPE html\b/);
           expect(html).toContain(expected[locale]);
           expect(html).not.toContain("Mock Email Content");
+          expect(text).toContain(expected[locale]);
+          expect(text).not.toContain("<!DOCTYPE");
+          expect(text).not.toContain("Mock Email Content");
         });
       }
 
       it("renders custom content", async () => {
-        const html = await renderEmailTemplate(
+        const {html, text} = await renderEmailTemplate(
           {
             type: "custom",
             props: {
@@ -82,6 +85,10 @@ describe("email worker rendering", () => {
         expect(html).toContain("Custom content");
         expect(html).toContain("Custom title");
         expect(html).not.toContain("Mock Email Content");
+        expect(text).toContain("Custom content");
+        expect(text.toLowerCase()).toContain("custom title");
+        expect(text).not.toContain("<!DOCTYPE");
+        expect(text).not.toContain("Mock Email Content");
       });
     });
   }

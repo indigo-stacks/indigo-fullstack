@@ -1,6 +1,6 @@
 ---
 name: indigo-email
-description: This skill should be used when the user asks to "send an email", "add an email template", "set up the email queue", "queue an email", "add a new email type", "migrate from sendEmail to queueEmail", "configure Plunk", "set up Cloudflare Queues for email", "debug email delivery", or works with email in Indigo stack projects.
+description: This skill should be used when the user asks to "send an email", "add an email template", "set up the email queue", "queue an email", "add a new email type", "migrate from sendEmail to queueEmail", "set up Cloudflare Email Service", "onboard an email sending domain", "set up Cloudflare Queues for email", "debug email delivery", or works with email in Indigo stack projects.
 ---
 
 # Email Queue System
@@ -10,11 +10,11 @@ Indigo stack projects use an asynchronous email queue powered by Cloudflare Queu
 ## Architecture
 
 ```
-User Request → Main App → queueEmail() → Cloudflare Queue → Email Worker → Plunk API
+User Request → Main App → queueEmail() → Cloudflare Queue → Email Worker → CF Email Service binding
                                     (instant)            (async)
 ```
 
-The email worker: renders the React Email template, sends via Plunk, retries on failure (exponential backoff: 30s / 60s / 120s, max 3 retries), moves failures to the dead letter queue.
+The email worker: renders the React Email template (HTML + plain-text alternative), sends via the Cloudflare Email Service `send_email` binding, retries transient failures (exponential backoff: 30s / 60s / 120s, max 3 retries), acks permanent failures immediately (bad payload, suppressed recipient, domain/account issues, exhausted daily quota), and the queue moves remaining failures to the dead letter queue.
 
 In local development, `queueEmail()` logs to console instead of queuing — no queue setup needed locally.
 
@@ -82,12 +82,18 @@ cd workers/indigo-email-queue-consumer && pnpm install && cd ../..
 # 3. Regenerate Cloudflare types (adds EMAIL_QUEUE binding)
 pnpm cf-types
 
-# 4. Set worker secret
-npx wrangler secret put PLUNK_API_KEY --config workers/indigo-email-queue-consumer/wrangler.jsonc
+# 4. Onboard the sending domain (dashboard, one-time):
+#    Compute → Email Service → Email Sending → Onboard Domain.
+#    Cloudflare adds SPF/DKIM/DMARC + bounce MX records on the
+#    cf-bounce subdomain. Requires Workers Paid + Cloudflare DNS.
+#    See docs/email-cf-migration.md for the full runbook.
 
 # 5. Deploy worker (before main app)
 pnpm email-worker:deploy
 ```
+
+No email API key or secret is needed — the `send_email` binding
+authenticates as the Cloudflare account.
 
 ## Configuration
 
@@ -174,9 +180,10 @@ Remove all `render()` calls — that work moves to the worker.
 
 ## Troubleshooting
 
-| Problem                         | Check                                                                      |
-| ------------------------------- | -------------------------------------------------------------------------- |
-| Worker deploy fails             | `PLUNK_API_KEY` secret set? Run `wrangler secret put`                      |
-| Emails queued but not delivered | Worker deployed? Plunk key valid? Run `wrangler tail`                      |
-| Messages accumulating in DLQ    | Worker logs for error details; check Plunk rate limits and template errors |
-| Main app hitting CPU limits     | Verify `queueEmail()` used everywhere, not `sendEmail()`                   |
+| Problem                         | Check                                                                                                     |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Worker deploy fails             | `send_email` binding present in `workers/indigo-email-queue-consumer/wrangler.jsonc`?                     |
+| `E_SENDER_NOT_VERIFIED` errors  | Sender domain onboarded for Email Sending? `SEND_EMAIL_FROM` domain matches onboarding?                   |
+| Emails queued but not delivered | Worker deployed? Sender domain onboarded? Run `wrangler tail`; check Email Sending activity log           |
+| Messages accumulating in DLQ    | Worker logs for error details; permanent failures are acked and logged, only transient ones reach the DLQ |
+| Main app hitting CPU limits     | Verify `queueEmail()` used everywhere, not `sendEmail()`                                                  |

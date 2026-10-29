@@ -11,6 +11,15 @@
   "vars": {
     "SEND_EMAIL_FROM": "Indigo Stack <noreply@indigostack.org>"
   },
+  "send_email": [
+    // Cloudflare Email Service binding. Requires the sender domain to be
+    // onboarded under Email Sending in the dashboard. Keep
+    // allowed_sender_addresses in sync with SEND_EMAIL_FROM above.
+    {
+      "name": "EMAIL",
+      "allowed_sender_addresses": ["noreply@indigostack.org"]
+    }
+  ],
   "queues": {
     "consumers": [
       {

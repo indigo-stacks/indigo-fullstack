@@ -11,7 +11,7 @@
 - [ ] Apply migrations to production database using `pnpm db:migrate:prod`.
 - [ ] Ensure all bundled tests pass using `pnpm test`.
 - [ ] Create the email queues using `pnpm queue:create`.
-- [ ] Set the `PLUNK_API_KEY` secret on the email consumer worker using `pnpm wrangler secret put PLUNK_API_KEY --config workers/indigo-email-queue-consumer/wrangler.jsonc`.
+- [ ] Onboard the sender domain for Cloudflare Email Sending in the dashboard (Compute → Email Service → Email Sending → Onboard Domain; requires Workers Paid and Cloudflare DNS). Keep the binding's `allowed_sender_addresses` in `workers/indigo-email-queue-consumer/wrangler.jsonc` in sync with `SEND_EMAIL_FROM`.
 - [ ] Deploy the email consumer worker using `pnpm email-worker:deploy` before the main app.
 - [ ] Deploy the app from the Git-linked Workers project (build command `pnpm build`) before setting production secrets.
 - [ ] Set `BETTER_AUTH_SECRET` secret using `pnpm wrangler secret put BETTER_AUTH_SECRET` for production.
