@@ -110,8 +110,9 @@ before the worker cutover ships. Only `indigostack.org` (the domain in
 > the **root-domain MX records**, which would break any existing mail flow on
 > `indigostack.org`.
 
-Records Cloudflare creates for Email Sending (all on the `cf-bounce`
-subdomain, so they never touch the root domain's existing MX/SPF):
+Records Cloudflare creates for Email Sending (the sending records sit on the
+`cf-bounce` subdomain, so they never touch the root domain's existing MX/SPF;
+only DMARC sits at `_dmarc` on the root domain):
 
 | Record | Name                                   | Purpose                                                                 |
 | ------ | -------------------------------------- | ----------------------------------------------------------------------- |

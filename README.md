@@ -126,7 +126,7 @@ This template sends email through the [Cloudflare Email Service](https://develop
 One-time setup for production:
 
 1. Ensure the account is on the **Workers Paid plan** (required for sending to arbitrary recipients) and the sending domain uses **Cloudflare DNS**.
-2. Onboard the sender domain: dashboard → **Compute** → **Email Service** → **Email Sending** → **Onboard Domain**. Cloudflare adds SPF, DKIM, DMARC, and bounce-routing DNS records on a `cf-bounce` subdomain automatically.
+2. Onboard the sender domain: dashboard → **Compute** → **Email Service** → **Email Sending** → **Onboard Domain**. Cloudflare adds the SPF, DKIM, and bounce-routing DNS records on a `cf-bounce` subdomain and a DMARC record at `_dmarc` on the root domain automatically.
 3. Keep the binding's `allowed_sender_addresses` in `workers/indigo-email-queue-consumer/wrangler.jsonc` in sync with `SEND_EMAIL_FROM`.
 
 See `docs/email-cf-migration.md` for the full runbook, including DMARC policy guidance and verification steps.

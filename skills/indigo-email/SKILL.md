@@ -84,8 +84,9 @@ pnpm cf-types
 
 # 4. Onboard the sending domain (dashboard, one-time):
 #    Compute → Email Service → Email Sending → Onboard Domain.
-#    Cloudflare adds SPF/DKIM/DMARC + bounce MX records on the
-#    cf-bounce subdomain. Requires Workers Paid + Cloudflare DNS.
+#    Cloudflare adds SPF/DKIM + bounce MX records on the cf-bounce
+#    subdomain and a DMARC record at _dmarc on the root domain.
+#    Requires Workers Paid + Cloudflare DNS.
 #    See docs/email-cf-migration.md for the full runbook.
 
 # 5. Deploy worker (before main app)
@@ -106,7 +107,16 @@ authenticates as the Cloudflare account.
   },
   "vars": {
     "SEND_EMAIL_FROM": "Your App <noreply@yourdomain.com>"
-  }
+  },
+  // The consumer sends through env.EMAIL. Without this binding every send
+  // fails and retries into the DLQ. Keep allowed_sender_addresses in sync
+  // with the address in SEND_EMAIL_FROM.
+  "send_email": [
+    {
+      "name": "EMAIL",
+      "allowed_sender_addresses": ["noreply@yourdomain.com"]
+    }
+  ]
 }
 ```
 
@@ -128,7 +138,16 @@ authenticates as the Cloudflare account.
   },
   "vars": {
     "SEND_EMAIL_FROM": "Your App <noreply@yourdomain.com>"
-  }
+  },
+  // The consumer sends through env.EMAIL. Without this binding every send
+  // fails and retries into the DLQ. Keep allowed_sender_addresses in sync
+  // with the address in SEND_EMAIL_FROM.
+  "send_email": [
+    {
+      "name": "EMAIL",
+      "allowed_sender_addresses": ["noreply@yourdomain.com"]
+    }
+  ]
 }
 ```
 
