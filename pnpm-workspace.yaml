@@ -18,11 +18,11 @@ overrides:
   # Remove once the pool's miniflare repins sharp to >= 0.35.5.
   sharp: "^0.35.5"
 
-  # The same pinned miniflare declares undici exactly "7.29.0"; every advisory is
-  # fixed in 7.29.1. Scoped to miniflare so the override does not drag unifont's
+  # The pool's miniflare pins undici exactly ("7.29.0" and "7.29.1"); every advisory is
+  # fixed in 7.30.1. Scoped to miniflare so the override does not drag unifont's
   # separate undici@8 resolution down a major.
-  # Remove once the pool's miniflare repins undici to >= 7.29.1.
-  "miniflare>undici": "^7.29.1"
+  # Remove once miniflare repins undici to >= 7.30.1.
+  "miniflare>undici": "^7.30.1"
 
   # ajv@8.20.0 is already latest but resolved fast-uri@3.1.7, one patch below the
   # 3.1.8 fix; ajv's own ^3 range admits the fix, so a future lockfile refresh

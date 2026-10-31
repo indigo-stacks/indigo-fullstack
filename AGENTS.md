@@ -47,7 +47,7 @@ This is an Astro application with React components for interactivity and email t
 - **API Layer**: Hono-based REST API mounted at `/api/v1/*` with modular route organization
 - **Database**: Drizzle ORM with Cloudflare D1 (serverless SQLite)
 - **Authentication**: Better Auth with JWT tokens and refresh token plugin
-- **Email**: React Email templates with Plunk API exclusively
+- **Email**: React Email templates sent through the Cloudflare Email Service binding
 - **Deployment**: Cloudflare Workers with static assets
 
 ## Better Auth Integration
@@ -196,8 +196,8 @@ Type-safe i18n with locale-aware routing:
 
 React Email templates delivered asynchronously through Cloudflare Queues:
 
-- **Production**: a real `BETTER_AUTH_BASE_URL` makes `queueEmail()` enqueue to the `EMAIL_QUEUE` binding; `workers/indigo-email-queue-consumer` renders the template and sends via the Plunk API with a custom domain
-- **Development and CI**: `BETTER_AUTH_BASE_URL` containing `localhost` or `127.0.0.1` makes `queueEmail()` log the message to the console instead of queueing — the Plunk API key plays no part in that decision, and no email is ever sent
+- **Production**: a real `BETTER_AUTH_BASE_URL` makes `queueEmail()` enqueue to the `EMAIL_QUEUE` binding; `workers/indigo-email-queue-consumer` renders the template and sends via the Cloudflare Email Service binding (the sender domain must be onboarded for Email Sending in the dashboard)
+- **Development and CI**: `BETTER_AUTH_BASE_URL` containing `localhost` or `127.0.0.1` makes `queueEmail()` log the message to the console instead of queueing — no email is ever sent and no Email Sending setup is needed
 - Template organization in `src/components/email/` with shared BaseLayout
 - Preview server available via `pnpm preview-email`
 
@@ -425,7 +425,7 @@ like.
 
 ### Development vs Production
 
-- Email: logged to the console while `BETTER_AUTH_BASE_URL` is a localhost address (dev and CI) vs queued to Cloudflare Queues and sent via Plunk (prod)
+- Email: logged to the console while `BETTER_AUTH_BASE_URL` is a localhost address (dev and CI) vs queued to Cloudflare Queues and sent via the Cloudflare Email Service binding (prod)
 - Database: Local D1 file vs remote Cloudflare D1
 - Secrets: `.dev.vars` file vs Wrangler secrets
 - Assets: Dev server vs Cloudflare Workers static assets
@@ -442,7 +442,7 @@ The `skills/indigo-theming/SKILL.md` guide covers everything beyond those two li
 Procedural guides live in `skills/` as `SKILL.md` files. They are named in no other document, so check them before improvising a procedure:
 
 - `skills/astro-upgrade/SKILL.md` - Upgrading Astro across a major: branch and baseline rules, the guide → pin → migrate → validate loop, troubleshooting
-- `skills/indigo-email/SKILL.md` - The email queue architecture, queuing emails, the available templates, adding a new one, Plunk and queue setup, local development with the full queue
+- `skills/indigo-email/SKILL.md` - The email queue architecture, queuing emails, the available templates, adding a new one, Cloudflare Email Service and queue setup, local development with the full queue
 - `skills/indigo-i18n/SKILL.md` - Translation file structure, using translations in pages and React components, locale-aware URLs, adding keys or a new language
 - `skills/indigo-testing/SKILL.md` - The test directory layout, running tests, how the Workers test server works, auth helpers, selector strategy, common patterns
 - `skills/indigo-theming/SKILL.md` - The theming system described in the Theming section above, in full

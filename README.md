@@ -12,7 +12,7 @@ Indigo Stack is a free, open-source web application starter template built with 
 - **[Better Auth](https://better-auth.com)** - Authentication system
 - **[Drizzle ORM](https://orm.drizzle.team)** - TypeScript ORM
 - **[Drizzle Kit](https://orm.drizzle.team/docs/cli)** - CLI tool for managing Drizzle ORM migrations and database schema
-- **[Plunk](https://useplunk.com)** - Modern email API for sending emails
+- **[Cloudflare Email Service](https://developers.cloudflare.com/email-service/)** - Email sending via a Workers binding
 - **[Hono](https://hono.dev)** - Lightweight, ultrafast web framework for API endpoints
 - **[Cloudflare D1](https://developers.cloudflare.com/d1)** - Serverless database for modern applications
 - **[React Email](https://react.email)** - Email templating library for React
@@ -27,7 +27,7 @@ Indigo Stack is a free, open-source web application starter template built with 
 - **User Authentication** flow with Better Auth.
 - **Database Integration** with Drizzle ORM and Cloudflare D1.
 - **Modern UI** with TailwindCSS v4.
-- **Email Functionality** with Plunk API and templating using React Email.
+- **Email Functionality** via the Cloudflare Email Service binding and templating using React Email.
 - **Development Tools**: Prettier for code formatting.
 - **API Layer**: Built with Hono for efficient request handling.
 - **Internationalization**: Type-safe i18n with consistent naming conventions and locale-aware URLs.
@@ -119,20 +119,19 @@ pnpm wrangler secret put BETTER_AUTH_SECRET
 
 Also configure `BETTER_AUTH_BASE_URL` in your `wrangler.jsonc` file under the `vars` section for production. To allow additional origins (for example preview deployments), set the optional comma-separated `BETTER_AUTH_TRUSTED_ORIGINS` var alongside it. When testing against `pnpm dev` through a tunnel hostname, name that host in both `ASTRO_DEV_ALLOWED_HOSTS` (so the dev server answers it) and `BETTER_AUTH_TRUSTED_ORIGINS` (so auth accepts the origin).
 
-### Plunk
+### Email Sending (Cloudflare Email Service)
 
-This template uses [Plunk](https://useplunk.com) for email functionality.
+This template sends email through the [Cloudflare Email Service](https://developers.cloudflare.com/email-service/) `send_email` binding on the email consumer worker (`workers/indigo-email-queue-consumer/`). No API key is involved — the binding authenticates as the Cloudflare account. The app only queues messages to the `EMAIL_QUEUE` binding; the consumer worker renders and sends them.
 
-`PLUNK_API_KEY` is read by the email consumer worker (`workers/indigo-email-queue-consumer/`), not by the app Worker. The app only queues messages to the `EMAIL_QUEUE` binding; the consumer worker sends them to Plunk.
+One-time setup for production:
 
-To set up Plunk for production, create an account and set the `PLUNK_API_KEY` secret on the consumer worker:
+1. Ensure the account is on the **Workers Paid plan** (required for sending to arbitrary recipients) and the sending domain uses **Cloudflare DNS**.
+2. Onboard the sender domain: dashboard → **Compute** → **Email Service** → **Email Sending** → **Onboard Domain**. Cloudflare adds the SPF, DKIM, and bounce-routing DNS records on a `cf-bounce` subdomain and a DMARC record at `_dmarc` on the root domain automatically.
+3. Keep the binding's `allowed_sender_addresses` in `workers/indigo-email-queue-consumer/wrangler.jsonc` in sync with `SEND_EMAIL_FROM`.
 
-```bash
-pnpm wrangler secret put PLUNK_API_KEY --config workers/indigo-email-queue-consumer/wrangler.jsonc
-```
+See `docs/email-cf-migration.md` for the full runbook, including DMARC policy guidance and verification steps.
 
-For local development, `wrangler dev` loads a Worker's local variables from the `.dev.vars` file next to its config, so a real key goes in `workers/indigo-email-queue-consumer/.dev.vars` (already gitignored there). Note the consumer only sends when the app has actually enqueued a message, and the app never enqueues while `BETTER_AUTH_BASE_URL` is a localhost address.
-The sender email address (`SEND_EMAIL_FROM`) should be configured in the worker's `wrangler.jsonc` file under the `vars` section for production.
+The sender email address (`SEND_EMAIL_FROM`) is configured in the worker's `wrangler.jsonc` file under the `vars` section; its domain must be the onboarded one.
 
 ### Astro Session
 
@@ -275,7 +274,7 @@ Request → queue.send(email) → Response (fast!)
               ↓
    [Email Queue Worker]
               ↓
-   render(template) → send via Plunk
+   render(template) → send via Cloudflare Email Service
 ```
 
 **Benefits:**
@@ -299,13 +298,9 @@ This creates:
 - `indigo-email-queue` - Primary queue for email messages
 - `indigo-email-queue-dlq` - Dead letter queue for failed messages
 
-#### 2. Configure Worker Secret
+#### 2. Onboard the Sending Domain
 
-The email worker needs the Plunk API key:
-
-```bash
-npx wrangler secret put PLUNK_API_KEY --config workers/indigo-email-queue-consumer/wrangler.jsonc
-```
+The binding needs the sender domain onboarded for Email Sending (see the [Email Sending](#email-sending-cloudflare-email-service) section above). Verify the DNS records in the dashboard under **Email Sending** → _domain_ → **Settings** before deploying.
 
 #### 3. Deploy Worker
 
@@ -324,15 +319,14 @@ The main app configuration in `wrangler.jsonc` includes:
 
 **Production:**
 
-- Set `PLUNK_API_KEY` secret on the worker (step 2 above)
-- Configure `SEND_EMAIL_FROM` in worker's `wrangler.jsonc`
+- Onboard the sender domain for Email Sending (step 2 above)
+- Configure `SEND_EMAIL_FROM` in worker's `wrangler.jsonc` (domain must match the onboarding)
 - Deploy worker before deploying main app
 
 **Local Development:**
 
 - In dev mode, emails are logged to console (not actually queued)
-- Optional: Run `pnpm email-worker:dev` in separate terminal to process queued emails locally
-- Optionally add `PLUNK_API_KEY` to `workers/indigo-email-queue-consumer/.dev.vars` if testing actual email delivery
+- Optional: Run `pnpm email-worker:dev` in separate terminal to process queued emails locally — `wrangler dev` simulates the binding and writes the rendered email to local files instead of sending
 
 ### Email Templates
 
@@ -471,7 +465,7 @@ To deploy to Cloudflare Workers with static assets:
 1. Create a new Workers project in the Cloudflare dashboard
 2. Link it to your GitHub repository
 3. Configure the build command: `pnpm build`
-4. Configure production environment variables and secrets (like `BETTER_AUTH_SECRET`) in the Pages dashboard settings. The email consumer worker's `PLUNK_API_KEY` secret is set separately with wrangler (see the Plunk section above).
+4. Configure production environment variables and secrets (like `BETTER_AUTH_SECRET`) in the Pages dashboard settings. The email consumer worker needs no secrets; it needs the sending domain onboarded for Email Sending (see the Email Sending section above).
 5. Migrate the production database.
 6. Deploy!
 
@@ -523,11 +517,11 @@ This project includes comprehensive test coverage with both unit tests (Vitest) 
 Email sending is decided by one rule in `queueEmail()` (`src/lib/email.ts`): when
 `BETTER_AUTH_BASE_URL` contains `localhost` or `127.0.0.1`, the message is logged to
 the console; otherwise it is queued to Cloudflare Queues, where the consumer worker
-renders it and sends it via Plunk. The Plunk API key plays no part in that decision.
+renders it and sends it via the Cloudflare Email Service binding.
 
-- **Local development** — `BETTER_AUTH_BASE_URL=http://localhost:4321` from `.dev.vars` puts the app in console-logging mode, so nothing is ever enqueued. No queue or Plunk setup is needed.
-- **CI / E2E tests** — the Test workflow sets `BETTER_AUTH_BASE_URL=http://127.0.0.1:8787`, so emails are logged and never sent; no Plunk key is configured anywhere in CI.
-- **Production** — a real hostname queues every email. Set `PLUNK_API_KEY` on the consumer worker (see the Plunk section above) or delivery fails when the worker processes the queue.
+- **Local development** — `BETTER_AUTH_BASE_URL=http://localhost:4321` from `.dev.vars` puts the app in console-logging mode, so nothing is ever enqueued. No queue or domain onboarding is needed.
+- **CI / E2E tests** — the Test workflow sets `BETTER_AUTH_BASE_URL=http://127.0.0.1:8787`, so emails are logged and never sent; no email setup is configured anywhere in CI.
+- **Production** — a real hostname queues every email. The sender domain must be onboarded for Email Sending (see the Email Sending section above) or delivery fails when the worker processes the queue.
 
 Users created against a local or CI base URL never receive a verification email, so
 they need their `emailVerified` flag set manually (e.g., `UPDATE user SET
@@ -538,7 +532,7 @@ emailVerified = 1 WHERE email = 'test@example.com'`).
 ```shell
 Is local development (localhost)?
 ├─ YES → Log to console (not queued)
-└─ NO → Queue email for async delivery via Plunk
+└─ NO → Queue email for async delivery via Cloudflare Email Service
 ```
 
 ### Test Coverage
@@ -561,7 +555,7 @@ All tests run automatically in CI on every pull request.
 - [Drizzle ORM Documentation](https://orm.drizzle.team/docs/overview)
 - [TailwindCSS Documentation](https://tailwindcss.com/docs)
 - [React Documentation](https://react.dev/learn)
-- [Plunk Documentation](https://useplunk.com/docs)
+- [Cloudflare Email Service Documentation](https://developers.cloudflare.com/email-service/)
 - [React Email](https://react.email/docs/introduction)
 
 ## Resources
