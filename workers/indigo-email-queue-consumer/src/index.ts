@@ -33,10 +33,10 @@ export default {
         console.log(`✅ Email sent successfully to ${to}`);
       } catch (error) {
         if (classifyEmailSendError(error) === "ack") {
-          // Permanent failure: bad payload, suppressed recipient, account or
-          // domain problem, or exhausted daily quota. Retrying identical
-          // bytes cannot succeed, so keep the retry budget and DLQ for
-          // genuinely transient errors.
+          // Permanent failure of this message: bad payload or a suppressed
+          // or disallowed recipient. Retrying or replaying identical bytes
+          // cannot succeed, so keep the retry budget and DLQ for errors
+          // that can clear.
           console.error(
             `⛔ Permanent send failure for ${to} (template: ${template.type}), not retrying:`,
             error

@@ -14,7 +14,7 @@ User Request → Main App → queueEmail() → Cloudflare Queue → Email Worker
                                     (instant)            (async)
 ```
 
-The email worker: renders the React Email template (HTML + plain-text alternative), sends via the Cloudflare Email Service `send_email` binding, retries transient failures (exponential backoff: 30s / 60s / 120s, max 3 retries), acks permanent failures immediately (bad payload, suppressed recipient, domain/account issues, exhausted daily quota), and the queue moves remaining failures to the dead letter queue.
+The email worker: renders the React Email template (HTML + plain-text alternative), sends via the Cloudflare Email Service `send_email` binding, acks failures caused by the message itself immediately (bad payload, suppressed or disallowed recipient), retries all other failures (exponential backoff: 60s / 120s / 240s, max 3 retries), and the queue moves messages that run out of retries to the dead letter queue. Domain, account, and daily-quota errors take the retry path on purpose, so the messages wait in the DLQ for a replay after the fix instead of being dropped.
 
 In local development, `queueEmail()` logs to console instead of queuing — no queue setup needed locally.
 
@@ -180,10 +180,10 @@ Remove all `render()` calls — that work moves to the worker.
 
 ## Troubleshooting
 
-| Problem                         | Check                                                                                                     |
-| ------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| Worker deploy fails             | `send_email` binding present in `workers/indigo-email-queue-consumer/wrangler.jsonc`?                     |
-| `E_SENDER_NOT_VERIFIED` errors  | Sender domain onboarded for Email Sending? `SEND_EMAIL_FROM` domain matches onboarding?                   |
-| Emails queued but not delivered | Worker deployed? Sender domain onboarded? Run `wrangler tail`; check Email Sending activity log           |
-| Messages accumulating in DLQ    | Worker logs for error details; permanent failures are acked and logged, only transient ones reach the DLQ |
-| Main app hitting CPU limits     | Verify `queueEmail()` used everywhere, not `sendEmail()`                                                  |
+| Problem                         | Check                                                                                                                                                           |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Worker deploy fails             | `send_email` binding present in `workers/indigo-email-queue-consumer/wrangler.jsonc`?                                                                           |
+| `E_SENDER_NOT_VERIFIED` errors  | Sender domain onboarded for Email Sending? `SEND_EMAIL_FROM` domain matches onboarding?                                                                         |
+| Emails queued but not delivered | Worker deployed? Sender domain onboarded? Run `wrangler tail`; check Email Sending activity log                                                                 |
+| Messages accumulating in DLQ    | Worker logs for error details; bad-payload and suppressed-recipient failures are acked and logged; transient, domain, account, and quota failures reach the DLQ |
+| Main app hitting CPU limits     | Verify `queueEmail()` used everywhere, not `sendEmail()`                                                                                                        |

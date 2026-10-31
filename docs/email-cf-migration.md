@@ -254,18 +254,26 @@ Plunk failures were opaque strings, so the consumer retried _everything_.
 Cloudflare errors carry a `.code`, which lets us stop burning retries on
 permanent failures:
 
-| Code                                                                                                  | Meaning               | Action                                                                       |
-| ----------------------------------------------------------------------------------------------------- | --------------------- | ---------------------------------------------------------------------------- |
-| `E_RATE_LIMIT_EXCEEDED`                                                                               | Rate limit hit        | **retry** (existing backoff fits)                                            |
-| `E_INTERNAL_SERVER_ERROR`                                                                             | Service hiccup        | **retry**                                                                    |
-| `E_DELIVERY_FAILED`                                                                                   | SMTP delivery failure | **retry** (may be transient)                                                 |
-| `E_DAILY_LIMIT_EXCEEDED`                                                                              | Daily quota reached   | retry is futile at 30–120 s backoff → ack + log loudly (DLQ noise otherwise) |
-| `E_VALIDATION_ERROR`, `E_FIELD_MISSING`, `E_HEADER_*`, `E_CONTENT_TOO_LARGE`, `E_TOO_MANY_RECIPIENTS` | Bad payload           | **ack + log** — retrying identical bytes can't succeed                       |
-| `E_SENDER_NOT_VERIFIED`, `E_SENDER_DOMAIN_NOT_AVAILABLE`, `E_ACCOUNT_SUSPENDED`                       | Config/account        | **ack + alert** — deploy/dashboard problem, not a message problem            |
-| `E_RECIPIENT_SUPPRESSED`                                                                              | CF suppression list   | **ack + log** — correct outcome for a bounced/complained address             |
+| Code                                                                                                  | Meaning               | Action                                                           |
+| ----------------------------------------------------------------------------------------------------- | --------------------- | ---------------------------------------------------------------- |
+| `E_RATE_LIMIT_EXCEEDED`                                                                               | Rate limit hit        | **retry** (existing backoff fits)                                |
+| `E_INTERNAL_SERVER_ERROR`                                                                             | Service hiccup        | **retry**                                                        |
+| `E_DELIVERY_FAILED`                                                                                   | SMTP delivery failure | **retry** (may be transient)                                     |
+| `E_DAILY_LIMIT_EXCEEDED`                                                                              | Daily quota reached   | **retry** → DLQ; replay after the quota resets                   |
+| `E_VALIDATION_ERROR`, `E_FIELD_MISSING`, `E_HEADER_*`, `E_CONTENT_TOO_LARGE`, `E_TOO_MANY_RECIPIENTS` | Bad payload           | **ack + log** — retrying identical bytes can't succeed           |
+| `E_SENDER_NOT_VERIFIED`, `E_SENDER_DOMAIN_NOT_AVAILABLE`, `E_ACCOUNT_SUSPENDED`                       | Config/account        | **retry** → DLQ; replay after the dashboard fix                  |
+| `E_RECIPIENT_SUPPRESSED`                                                                              | CF suppression list   | **ack + log** — correct outcome for a bounced/complained address |
+
+Only errors caused by the message itself are acked. Config, account, and
+quota errors hit every message alike and clear once the cause is fixed, so
+acking them would drop every email sent during the outage (for example, all
+verification mails while the domain onboarding is incomplete). Retrying them
+instead parks them in the DLQ, where they can be replayed.
 
 Implement as a `NON_RETRYABLE` code set; `ack()` for those, keep the current
-`retry({delaySeconds: 30 * 2^attempts})` + DLQ for the rest.
+`retry({delaySeconds: 30 * 2^attempts})` + DLQ for the rest. `attempts`
+starts at 1, so the delays are 60 s / 120 s / 240 s and a message reaches the
+DLQ about 7 minutes after its first failure (`max_retries: 3`).
 
 ### 6. What gets deleted at cutover
 
@@ -367,6 +375,6 @@ plan cost. Compare against current Plunk spend at review time.
 ["noreply@indigostack.org"]`? Cheap blast-radius guard; recommend yes.
 3. **Plain-text part** — in this PR or a follow-up? (Recommend this PR; ~20
    lines.)
-4. **`E_DAILY_LIMIT_EXCEEDED`** — ack-and-log vs. retry-and-DLQ. Recommend
-   ack + `console.error` so the activity log/quota alert is the signal, not
-   DLQ churn.
+4. **`E_DAILY_LIMIT_EXCEEDED`** — ack-and-log vs. retry-and-DLQ. Decided:
+   retry-and-DLQ, like the other config/account errors. Acking would drop
+   every email sent until the quota resets; the DLQ keeps them for a replay.
