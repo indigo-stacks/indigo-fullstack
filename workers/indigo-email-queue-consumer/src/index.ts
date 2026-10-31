@@ -1,6 +1,11 @@
 import type {EmailQueueMessage} from "@app/lib/email-queue";
 import {renderEmailTemplate} from "./render-template";
-import {classifyEmailSendError, sendEmailWithCloudflare} from "./send-email";
+import {
+  classifyEmailSendError,
+  isEmailAddress,
+  parseFromAddress,
+  sendEmailWithCloudflare
+} from "./send-email";
 
 export interface Env {
   /**
@@ -12,8 +17,26 @@ export interface Env {
   SEND_EMAIL_FROM: string;
 }
 
+function retryWithBackoff(message: Message<EmailQueueMessage>): void {
+  message.retry({delaySeconds: 30 * Math.pow(2, message.attempts)});
+}
+
 export default {
   async queue(batch: MessageBatch<EmailQueueMessage>, env: Env): Promise<void> {
+    const from = parseFromAddress(env.SEND_EMAIL_FROM);
+
+    if (!isEmailAddress(from.email)) {
+      // The binding would reject a malformed sender as E_VALIDATION_ERROR,
+      // which acks (drops) the message. The fault is in the configuration,
+      // not the messages, so retry them into the DLQ for a replay once
+      // SEND_EMAIL_FROM is fixed.
+      console.error(
+        `❌ SEND_EMAIL_FROM is not a valid address (${JSON.stringify(env.SEND_EMAIL_FROM)}), retrying the batch`
+      );
+      batch.messages.forEach(retryWithBackoff);
+      return;
+    }
+
     for (const message of batch.messages) {
       const {to, subject, template, locale, queuedAt} = message.body;
 
@@ -26,7 +49,7 @@ export default {
         await sendEmailWithCloudflare(
           env.EMAIL,
           {to, subject, html, text},
-          env.SEND_EMAIL_FROM
+          from
         );
 
         message.ack();
@@ -46,8 +69,7 @@ export default {
         }
 
         console.error(`❌ Failed to process email for ${to}:`, error);
-        const retryDelay = 30 * Math.pow(2, message.attempts);
-        message.retry({delaySeconds: retryDelay});
+        retryWithBackoff(message);
       }
     }
   }

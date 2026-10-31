@@ -65,14 +65,22 @@ export function parseFromAddress(from?: string): EmailAddress {
     : {name: "Indigo Stack", email: value};
 }
 
+/**
+ * A shape check, not full RFC 5322 validation: enough to catch a mistyped
+ * SEND_EMAIL_FROM before the binding rejects it as E_VALIDATION_ERROR.
+ */
+export function isEmailAddress(value: string): boolean {
+  return /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(value);
+}
+
 export async function sendEmailWithCloudflare(
   email: SendEmail,
   message: OutgoingEmail,
-  sendEmailFrom?: string
+  from: EmailAddress
 ): Promise<EmailSendResult> {
   return email.send({
     to: message.to,
-    from: parseFromAddress(sendEmailFrom),
+    from,
     subject: message.subject,
     html: message.html,
     ...(message.text ? {text: message.text} : {})

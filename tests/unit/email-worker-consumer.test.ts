@@ -5,6 +5,7 @@ import worker, {
 } from "../../workers/indigo-email-queue-consumer/src/index";
 import {
   classifyEmailSendError,
+  isEmailAddress,
   parseFromAddress
 } from "../../workers/indigo-email-queue-consumer/src/send-email";
 
@@ -32,11 +33,12 @@ function queueMessage(attempts = 1) {
 
 async function consume(
   message: ReturnType<typeof queueMessage>,
-  send: SendEmail["send"]
+  send: SendEmail["send"],
+  sendEmailFrom = "Indigo Stack <noreply@indigostack.org>"
 ) {
   const env = {
     EMAIL: {send},
-    SEND_EMAIL_FROM: "Indigo Stack <noreply@indigostack.org>"
+    SEND_EMAIL_FROM: sendEmailFrom
   } as Env;
   const batch = {
     messages: [message]
@@ -89,6 +91,21 @@ describe("parseFromAddress", () => {
       name: "Indigo Stack",
       email: "noreply@indigostack.org"
     });
+  });
+});
+
+describe("isEmailAddress", () => {
+  it("accepts a plain address", () => {
+    expect(isEmailAddress("noreply@indigostack.org")).toBe(true);
+  });
+
+  it.each([
+    "noreply",
+    "noreply@indigostack",
+    "Indigo Stack noreply@indigostack.org",
+    "<noreply@indigostack.org>"
+  ])("rejects %s", (value) => {
+    expect(isEmailAddress(value)).toBe(false);
   });
 });
 
@@ -147,4 +164,16 @@ describe("email queue consumer", () => {
       expect(message.ack).not.toHaveBeenCalled();
     }
   );
+
+  // The binding would reject the sender as E_VALIDATION_ERROR, which acks.
+  it("retries without sending when SEND_EMAIL_FROM is malformed", async () => {
+    const message = queueMessage();
+    const send = vi.fn();
+
+    await consume(message, send, "Indigo Stack <noreply>");
+
+    expect(send).not.toHaveBeenCalled();
+    expect(message.retry).toHaveBeenCalledWith({delaySeconds: 60});
+    expect(message.ack).not.toHaveBeenCalled();
+  });
 });
